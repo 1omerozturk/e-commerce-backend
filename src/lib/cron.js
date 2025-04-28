@@ -1,6 +1,5 @@
 import cron from 'cron'
 import https from 'https'
-import 'dotenv/config'
 
 const job = new cron.CronJob('*/14 * * * *', function () {
   https

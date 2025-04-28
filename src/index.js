@@ -3,7 +3,7 @@ import 'dotenv/config'
 import authRoutes from './routes/authRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js'
 import productRoutes from './routes/productRoutes.js'
-// import job from './lib/cron.js'
+import job from './lib/cron.js'
 
 import { connectDB } from './lib/db.js'
 import cors from 'cors'
@@ -11,7 +11,7 @@ import cors from 'cors'
 const app = express()
 const PORT = process.env.PORT || 2626
 
-// job.start()
+job.start()
 app.use(express.json())
 app.use(cors())
 
