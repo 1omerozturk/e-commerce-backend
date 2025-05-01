@@ -38,12 +38,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Username already exists' })
 
     // get random avatar
-    const profileImage = `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+    const profileImage = `https://api.dicebear.com/7.x/avataaars/png?seed=${username}`
     const user = new User({
       email,
       username,
       password,
       profileImage,
+      role
     })
     await user.save()
 
@@ -56,11 +57,14 @@ router.post('/register', async (req, res) => {
         username: user.username,
         email: user.email,
         profileImage: user.profileImage,
+        role: user.role,
       },
     })
   } catch (error) {
     console.log('Error in user register', error)
-    res.status(500).json({ message: 'Interval server error in register' + error })
+    res
+      .status(500)
+      .json({ message: 'Interval server error in register' + error })
   }
 })
 
@@ -95,6 +99,7 @@ router.post('/login', async (req, res) => {
         username: user.username,
         email: user.email,
         profileImage: user.profileImage,
+        role: user.role,
       },
     })
   } catch (error) {
@@ -108,11 +113,9 @@ router.post('/update-password', async (req, res) => {
     const { email, password, newpassword } = req.body
 
     if (!email || !password || !newpassword)
-      return res
-        .status(400)
-        .json({
-          message: 'All fields are required (email, password, new password)',
-        })
+      return res.status(400).json({
+        message: 'All fields are required (email, password, new password)',
+      })
 
     if (newpassword.length < 8)
       return res
