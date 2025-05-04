@@ -5,16 +5,33 @@ import protectedAdminRoute from '../middleware/auth.admin.middleware.js'
 
 const router = express.Router()
 
-// Get all categories
 router.get('/', async (req, res) => {
   try {
-    const categories = await Category.find()
-    res.status(200).json(categories)
+    const categoriesWithCounts = await Category.aggregate([
+      {
+        $lookup: {
+          from: 'products', // MongoDB'deki ürün koleksiyonu adı
+          localField: '_id',
+          foreignField: 'category',
+          as: 'products',
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          description: 1,
+          image: 1,
+          productCount: { $size: '$products' },
+        },
+      },
+    ]);
+
+    res.status(200).json(categoriesWithCounts);
   } catch (error) {
-    console.error('Error fetching categories:', error)
-    res.status(500).json({ message: 'Error fetching categories' })
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ message: 'Error fetching categories' });
   }
-})
+});
 
 // get one category with id
 router.get('/:id', async (req, res) => {
@@ -34,31 +51,20 @@ router.get('/:id', async (req, res) => {
 router.post('/', protectedAdminRoute, async (req, res) => {
   try {
     const { name, description, image } = req.body
+    console.log(name, description, image)
 
     if (!name) {
       return res.status(400).json({ message: 'Please provide all filds.' })
     }
 
-    // image if is exists upload to cloudinary
-    if (image != '') {
-      const uploadResponse = await cloudinary.uploader.upload(image)
-      const imageUrl = uploadResponse.secure_url
-      const newCategory = new Category({
-        name,
-        description,
-        image: imageUrl,
-      })
-      await newCategory.save()
-      res.status(201).json(newCategory)
-    } else {
-      const newCategory = new Category({
-        name,
-        description,
-        image: imageUrl,
-      })
-      await newCategory.save()
-      res.status(201).json(newCategory)
-    }
+    const newCategory = new Category({
+      name,
+      description,
+      image,
+    })
+    await newCategory.save()
+    res.status(201).json(newCategory)
+    
   } catch (error) {
     console.error('Error adding category:', error)
     res.status(500).json({ message: 'Error adding category' })
@@ -69,18 +75,19 @@ router.post('/', protectedAdminRoute, async (req, res) => {
 router.delete('/:id', protectedAdminRoute, async (req, res) => {
   try {
     const category = await Category.findById(req.params.id)
-       if (!category) return res.status(404).json({ message: 'Category not found' })
-   
-       if (category.image && category.image.includes('cloudinary')) {
-         try {
-           const publicId = category.image.split('/').pop().split('.')[0]
-           await cloudinary.uploader.destroy(publicId)
-         } catch (deleteError) {
-           console.log('Error deleting image from cloudinary ', deleteError)
-         }
-       }
-       await category.deleteOne()
-       res.json({ message: 'Category deleted sueccessfully.' })
+    if (!category)
+      return res.status(404).json({ message: 'Category not found' })
+
+    if (category.image && category.image.includes('cloudinary')) {
+      try {
+        const publicId = category.image.split('/').pop().split('.')[0]
+        await cloudinary.uploader.destroy(publicId)
+      } catch (deleteError) {
+        console.log('Error deleting image from cloudinary ', deleteError)
+      }
+    }
+    await category.deleteOne()
+    res.json({ message: 'Category deleted sueccessfully.' })
   } catch (error) {
     console.error('Error deleting category:', error)
     res.status(500).json({ message: 'Error deleting category' })

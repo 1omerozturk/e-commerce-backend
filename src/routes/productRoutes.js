@@ -52,45 +52,65 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', protectedAdminRoute, async (req, res) => {
   try {
-    const { name, price, description, images, stock, category } = req.body
+    let { name, price, description, images, stock, category } = req.body
 
-    // Kategorinin var olup olmadığını kontrol et
+    // Kategori kontrolü
     const existingCategory = await Category.findById(category)
     if (!existingCategory) {
-      return res.status(400).json({ message: 'Invalid category ID' })
+      return res.status(400).json({ message: 'Geçersiz kategori ID' })
     }
 
-    // Resimleri Cloudinary'e yükle
-    const imageUrls = []
-    if (images && images.length > 0) {
-      for (const image of images) {
-        try {
-          const uploadResponse = await cloudinary.uploader.upload(image)
-          imageUrls.push(uploadResponse.secure_url) // Yüklenen URL'leri listeye ekle
-        } catch (error) {
-          console.error('Error uploading image:', error)
-          return res
-            .status(500)
-            .json({ message: 'Error uploading one of the images' })
-        }
+    // string olarak geldiyse parse et
+    if (typeof images === 'string') {
+      try {
+        images = JSON.parse(images)
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          error: 'Resim formatı geçersiz (JSON parse hatası)',
+        })
       }
     }
 
-    // Yeni ürünü oluştur ve veritabanına kaydet
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ message: 'Images alanı boş veya geçersiz' })
+    }
+
+    const imageUrls = []
+
+    for (const image of images) {
+      try {
+        const imageUrl = image.startsWith('data:image/')
+          ? image
+          : `data:image/jpeg;base64,${image}`
+        const uploadResponse = await cloudinary.uploader.upload(imageUrl, {
+          folder: 'products',
+        })
+        imageUrls.push(uploadResponse.secure_url)
+      } catch (err) {
+        return res.status(500).json({
+          message: 'Bir resim yüklenemedi',
+          detail: err.message,
+        })
+      }
+    }
+
     const newProduct = new Product({
       name,
       price,
       description,
-      images: imageUrls, // Resim URL'lerini kaydet
+      images: imageUrls,
       stock,
       category,
     })
 
     await newProduct.save()
-    res.status(201).json(newProduct)
+    return res.status(201).json(newProduct)
   } catch (error) {
-    console.error('Error adding product:', error)
-    res.status(500).json({ message: 'Product add error' })
+    console.error('Ürün ekleme hatası:', error)
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası', detail: error.message })
   }
 })
 
@@ -129,17 +149,36 @@ router.delete('/:id', protectedAdminRoute, async (req, res) => {
     const product = await Product.findById(req.params.id)
     if (!product) return res.status(404).json({ message: 'Product not found' })
 
-    if (product.image && product.image.includes('cloudinary')) {
-      try {
-        const publicId = product.image.split('/').pop().split('.')[0]
-        await cloudinary.uploader.destroy(publicId)
-      } catch (deleteError) {
-        console.log('Error deleting image from cloudinary ', deleteError)
+    // Cloudinary'den tüm resimleri sil
+    if (Array.isArray(product.images)) {
+      for (const imageUrl of product.images) {
+        if (imageUrl.includes('cloudinary')) {
+          try {
+            const urlParts = imageUrl.split('/upload/');
+            if (urlParts.length === 2) {
+              const pathWithVersion = urlParts[1]; // "v1746260032/products/yl8dp1vf9n3tdvzsld6e.jpg"
+              const pathSegments = pathWithVersion.split('/');
+    
+              // "vXXXX" olan versiyonu çıkar (ilk segment)
+              pathSegments.shift(); // Remove "v1746260032"
+    
+              // Kalan kısmı birleştir ve uzantıyı çıkar
+              const fileWithExt = pathSegments.join('/'); // "products/yl8dp1vf9n3tdvzsld6e.jpg"
+              const publicId = fileWithExt.replace(/\.[^/.]+$/, ""); // "products/yl8dp1vf9n3tdvzsld6e"
+    
+              await cloudinary.uploader.destroy(publicId);
+            }
+          } catch (deleteErr) {
+            console.warn('Cloudinary silme hatası:', deleteErr.message);
+          }
+        }
       }
     }
+    
 
+    // Veritabanından ürünü sil
     await product.deleteOne()
-    res.json({ message: 'Product deleted sueccessfully.' })
+    res.json({ message: 'Product deleted successfully.' })
   } catch (error) {
     console.error('Error deleting product:', error)
     res.status(500).json({ message: 'Product delete error' })
