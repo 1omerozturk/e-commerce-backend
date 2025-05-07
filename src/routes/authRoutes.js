@@ -3,6 +3,7 @@ import User from '../models/User.js'
 import jwt from 'jsonwebtoken'
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
+import protectedUserRoute from '../middleware/auth.user.middleware.js'
 
 const router = express.Router()
 
@@ -44,7 +45,7 @@ router.post('/register', async (req, res) => {
       username,
       password,
       profileImage,
-      role
+      role,
     })
     await user.save()
 
@@ -100,6 +101,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         profileImage: user.profileImage,
         role: user.role,
+        shippingAddresses: user.shippingAddresses,
       },
     })
   } catch (error) {
@@ -108,7 +110,7 @@ router.post('/login', async (req, res) => {
   }
 })
 
-router.post('/update-password', async (req, res) => {
+router.post('/update-password', protectedUserRoute, async (req, res) => {
   try {
     const { email, password, newpassword } = req.body
 

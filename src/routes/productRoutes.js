@@ -154,27 +154,26 @@ router.delete('/:id', protectedAdminRoute, async (req, res) => {
       for (const imageUrl of product.images) {
         if (imageUrl.includes('cloudinary')) {
           try {
-            const urlParts = imageUrl.split('/upload/');
+            const urlParts = imageUrl.split('/upload/')
             if (urlParts.length === 2) {
-              const pathWithVersion = urlParts[1]; // "v1746260032/products/yl8dp1vf9n3tdvzsld6e.jpg"
-              const pathSegments = pathWithVersion.split('/');
-    
+              const pathWithVersion = urlParts[1] // "v1746260032/products/yl8dp1vf9n3tdvzsld6e.jpg"
+              const pathSegments = pathWithVersion.split('/')
+
               // "vXXXX" olan versiyonu çıkar (ilk segment)
-              pathSegments.shift(); // Remove "v1746260032"
-    
+              pathSegments.shift() // Remove "v1746260032"
+
               // Kalan kısmı birleştir ve uzantıyı çıkar
-              const fileWithExt = pathSegments.join('/'); // "products/yl8dp1vf9n3tdvzsld6e.jpg"
-              const publicId = fileWithExt.replace(/\.[^/.]+$/, ""); // "products/yl8dp1vf9n3tdvzsld6e"
-    
-              await cloudinary.uploader.destroy(publicId);
+              const fileWithExt = pathSegments.join('/') // "products/yl8dp1vf9n3tdvzsld6e.jpg"
+              const publicId = fileWithExt.replace(/\.[^/.]+$/, '') // "products/yl8dp1vf9n3tdvzsld6e"
+
+              await cloudinary.uploader.destroy(publicId)
             }
           } catch (deleteErr) {
-            console.warn('Cloudinary silme hatası:', deleteErr.message);
+            console.warn('Cloudinary silme hatası:', deleteErr.message)
           }
         }
       }
     }
-    
 
     // Veritabanından ürünü sil
     await product.deleteOne()
