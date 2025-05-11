@@ -3,11 +3,11 @@ import bcrypt from 'bcryptjs';
 
 const shippingAddressSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
-  address: { type: String, required: true },
+  country: { type: String, required: true },
   city: { type: String, required: true },
   postalCode: { type: String, required: true },
-  country: { type: String, required: true },
-}, { _id: false });
+  fullAddress: { type: String, required: true },
+}, { _id: true });
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -15,10 +15,9 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  username: {
+  firstname_lastname: {
     type: String,
     required: true,
-    unique:true,
   },
   password: {
     type: String,
@@ -38,6 +37,12 @@ const userSchema = new mongoose.Schema({
   shippingAddresses: {
     type: [shippingAddressSchema],
     default: [],
+    validate:{
+      validator:function (arr){
+        return arr.length <= 3;
+      },
+      message:'Maximum 3 addresses can be added.'
+    }
   },
 }, { timestamps: true });
 

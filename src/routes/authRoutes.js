@@ -3,9 +3,14 @@ import User from '../models/User.js'
 import jwt from 'jsonwebtoken'
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import nodemailer from 'nodemailer'
 import protectedUserRoute from '../middleware/auth.user.middleware.js'
 
 const router = express.Router()
+
+// Keep the password reset codes for password reset functions.
+const verificationCodes = new Map()
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '15d' })
@@ -13,36 +18,32 @@ const generateToken = (userId) => {
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, username, password } = req.body
+    const { email, firstname_lastname, password } = req.body
 
-    if (!username || !email || !password)
+    if (!firstname_lastname || !email || !password)
       return res
         .status(400)
-        .json({ message: 'All fields are required (email,username, password)' })
+        .json({ message: 'All fields are required (email,First Name Last Name, password)' })
 
     if (password.length < 8)
       return res
         .status(400)
         .json({ message: 'Password should be at least 8 characters long' })
 
-    if (username.length < 3)
+    if (username_lastname.length < 3)
       return res
         .status(400)
-        .json({ message: 'Username should be at least 3 characters long' })
+        .json({ message: 'First Name and Last Name should be at least 3 characters long' })
 
     const existingEmail = await User.findOne({ email })
     if (existingEmail)
       return res.status(400).json({ message: 'Email already exists' })
 
-    const existingUserName = await User.findOne({ username })
-    if (existingUserName)
-      return res.status(400).json({ message: 'Username already exists' })
-
     // get random avatar
-    const profileImage = `https://api.dicebear.com/7.x/avataaars/png?seed=${username}`
+    const profileImage = `https://api.dicebear.com/7.x/avataaars/png?seed=${username_lastname}`
     const user = new User({
       email,
-      username,
+      firstname_lastname: firstname_lastname,
       password,
       profileImage,
       role,
@@ -55,7 +56,7 @@ router.post('/register', async (req, res) => {
       token,
       user: {
         id: user._id,
-        username: user.username,
+        firstname_lastname: user.firstname_lastname,
         email: user.email,
         profileImage: user.profileImage,
         role: user.role,
@@ -97,7 +98,7 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user._id,
-        username: user.username,
+        firstname_lastname: user.firstname_lastname,
         email: user.email,
         profileImage: user.profileImage,
         role: user.role,
@@ -109,6 +110,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Internal server error in login' })
   }
 })
+
 
 router.post('/update-password', protectedUserRoute, async (req, res) => {
   try {
@@ -150,6 +152,54 @@ router.post('/update-password', protectedUserRoute, async (req, res) => {
     res
       .status(500)
       .json({ message: 'Internal server error in updating password.' })
+  }
+})
+
+// Password Reset functions and a Map for Keep the temporary codes.
+
+router.post('/send-reset-code', async (req, res) => {
+  try {
+    const { email } = req.body
+    console.log(email)
+
+    if (!email) return res.status(400).json({ message: 'Email is required' })
+
+    const user = await User.findOne({ email })
+
+    if (!user) return res.status(404).json({ message: 'User not found.' })
+
+    // Generate random 6 numbered code
+    const verificationCode = crypto.randomInt(100000, 999999).toString()
+
+    // add code the verificationCodes and 5 minute deadline expires
+    verificationCodes.set(email, {
+      code: verificationCode,
+      expires: Date.now() + 500000,
+    })
+
+    console.log('verificationCode: ', verificationCode)
+    console.log('verificationCodes: ', verificationCodes)
+
+    // create email service and connection the service Email
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: 'required_gmail@gmail.com', pass: 'gmailPassword' },
+    })
+
+    // send email
+
+    await transporter.sendMail({
+      from: 'required_gmail@gmail.com',
+      to: email,
+      subject: 'Password Reset Code',
+      text: `Your verification code is: ${verificationCode} the code expires in 1 minute.`,
+    })
+
+    res.status(200).json({ message: 'Verification code sent successfully' })
+  } catch (error) {
+    console.error('Error sending reset code:', error)
+    res.status(500).json({ message: 'Internal Server Error' })
   }
 })
 
