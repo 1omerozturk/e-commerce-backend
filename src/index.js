@@ -5,7 +5,6 @@ import categoryRoutes from './routes/categoryRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
-import job from './lib/cron.js'
 
 import { connectDB } from './lib/db.js'
 import cors from 'cors'
@@ -13,7 +12,10 @@ import cors from 'cors'
 const app = express()
 const PORT = process.env.PORT || 2626
 
-job.start()
+// cron function
+// import job from './lib/cron.js'
+// job.start()
+
 app.use(express.json({ limit: '20mb' }))
 app.use(express.urlencoded({ limit: '20mb', extended: true }))
 app.use(cors())

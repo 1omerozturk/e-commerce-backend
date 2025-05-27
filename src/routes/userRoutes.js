@@ -76,7 +76,6 @@ router.put('/addresses/:id', protectedUserRoute, async (req, res) => {
 
     const address = user.shippingAddresses.id(req.params.id)
     if (!address) return res.status(404).json({ message: 'Address not found' })
-
     // Alanları güncelle
     Object.assign(address, req.body)
 
@@ -96,15 +95,16 @@ router.put('/addresses/:id', protectedUserRoute, async (req, res) => {
 router.delete('/addresses/:id', protectedUserRoute, async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
-    if(!user) return res.status(400).json({message:"User not found"})
-      user.shippingAddresses = user.shippingAddresses.filter(
-    (addr) => addr._id.toString() !== req.params.id,
-  )
-  await user.save()
-  res.json(user.shippingAddresses)
-} catch (error) {
-  console.error(error)
-}
+    if (!user) return res.status(400).json({ message: 'User not found' })
+
+    user.shippingAddresses = user.shippingAddresses.filter(
+      (addr) => addr._id.toString() !== req.params.id,
+    )
+    await user.save()
+    res.json(user.shippingAddresses)
+  } catch (error) {
+    console.error(error)
+  }
 })
 
 export default router
