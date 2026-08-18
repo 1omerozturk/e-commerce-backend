@@ -1,5 +1,6 @@
 import express from 'express'
 import Category from '../models/Category.js'
+import { collection } from '../lib/firestore.js'
 import cloudinary from '../lib/cloudinary.js'
 import protectedAdminRoute from '../middleware/auth.admin.middleware.js'
 
@@ -7,110 +8,51 @@ const router = express.Router()
 
 router.get('/', async (req, res) => {
   try {
-    const categoriesWithCounts = await Category.aggregate([
-      {
-        $lookup: {
-          from: 'products', // MongoDB'deki ürün koleksiyonu adı
-          localField: '_id',
-          foreignField: 'category',
-          as: 'products',
-        },
-      },
-      {
-        $project: {
-          name: 1,
-          description: 1,
-          image: 1,
-          productCount: { $size: '$products' },
-        },
-      },
-    ]);
+    const categories = await Category.findAll()
+    const products = collection('products')
+    const result = await Promise.all(categories.map(async (category) => {
+      const count = await products.where('category', '==', category._id).count().get()
+      return { ...category, productCount: count.data().count }
+    }))
+    res.json(result)
+  } catch (error) { res.status(500).json({ message: 'Error fetching categories' }) }
+})
 
-    res.status(200).json(categoriesWithCounts);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ message: 'Error fetching categories' });
-  }
-});
-
-// get one category with id
 router.get('/:id', async (req, res) => {
   try {
     const category = await Category.findById(req.params.id)
-    if (!category) {
-      return res.status(404).json({ message: 'Category not found' })
-    }
-    res.status(200).json(category)
-  } catch (error) {
-    console.error('Error fetching category:', error)
-    res.status(500).json({ message: 'Error fetching category' })
-  }
+    if (!category) return res.status(404).json({ message: 'Category not found' })
+    res.json(category)
+  } catch (error) { res.status(500).json({ message: 'Error fetching category' }) }
 })
 
-// Add category
 router.post('/', protectedAdminRoute, async (req, res) => {
   try {
     const { name, description, image } = req.body
-    console.log(name, description, image)
-
-    if (!name) {
-      return res.status(400).json({ message: 'Please provide all filds.' })
-    }
-
-    const newCategory = new Category({
-      name,
-      description,
-      image,
-    })
-    await newCategory.save()
-    res.status(201).json(newCategory)
-    
-  } catch (error) {
-    console.error('Error adding category:', error)
-    res.status(500).json({ message: 'Error adding category' })
-  }
+    if (!name) return res.status(400).json({ message: 'Please provide all fields.' })
+    res.status(201).json(await Category.create({ name, description, image }))
+  } catch (error) { res.status(500).json({ message: 'Error adding category' }) }
 })
 
-// Delete one category with id
+router.put('/:id', protectedAdminRoute, async (req, res) => {
+  try {
+    const category = await Category.update(req.params.id, req.body)
+    if (!category) return res.status(404).json({ message: 'Category not found' })
+    res.json(category)
+  } catch (error) { res.status(500).json({ message: 'Error updating category' }) }
+})
+
 router.delete('/:id', protectedAdminRoute, async (req, res) => {
   try {
     const category = await Category.findById(req.params.id)
-    if (!category)
-      return res.status(404).json({ message: 'Category not found' })
-
-    if (category.image && category.image.includes('cloudinary')) {
-      try {
-        const publicId = category.image.split('/').pop().split('.')[0]
-        await cloudinary.uploader.destroy(publicId)
-      } catch (deleteError) {
-        console.log('Error deleting image from cloudinary ', deleteError)
-      }
+    if (!category) return res.status(404).json({ message: 'Category not found' })
+    if (category.image?.includes('cloudinary')) {
+      const publicId = category.image.split('/').pop().split('.')[0]
+      await cloudinary.uploader.destroy(publicId).catch(() => {})
     }
-    await category.deleteOne()
-    res.json({ message: 'Category deleted sueccessfully.' })
-  } catch (error) {
-    console.error('Error deleting category:', error)
-    res.status(500).json({ message: 'Error deleting category' })
-  }
-})
-
-// Update one category with id
-router.put('/:id', protectedAdminRoute, async (req, res) => {
-  try {
-    const { name, description, image } = req.body
-    const updatedCategory = await Category.findByIdAndUpdate(
-      req.params.id,
-      { name, description, image },
-      { new: true },
-    )
-    if (!updatedCategory) {
-      return res.status(404).json({ message: 'Category not found' })
-    }
-    res.status(200).json(updatedCategory)
-  } catch (error) {
-    console.error('Error updating category:', error)
-    res.status(500).json({ message: 'Error updating category' })
-  }
+    await Category.remove(req.params.id)
+    res.json({ message: 'Category deleted successfully.' })
+  } catch (error) { res.status(500).json({ message: 'Error deleting category' }) }
 })
 
 export default router

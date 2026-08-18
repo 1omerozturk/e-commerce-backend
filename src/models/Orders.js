@@ -1,51 +1,37 @@
-import mongoose from 'mongoose';
+import { collection, findById, serverTimestamp, toPlainDocument } from '../lib/firestore.js'
+import Product from './Product.js'
+import User from './User.js'
 
-const orderSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    items: [
-      {
-        product: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Product',
-          required: true,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-          min: 1,
-        },
-      },
-    ],
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
-    shippingAddress: {
-      fullName: { type: String, },
-      address: { type: String, },
-      city: { type: String, },
-      postalCode: { type: String, },
-      country: { type: String,  },
-    },
-    paymentStatus: {
-      type: String,
-      enum: ['pending', 'paid', 'failed'],
-      default: 'pending',
-    },
-    deliveryStatus: {
-      type: String,
-      enum: ['processing', 'shipped', 'delivered'],
-      default: 'processing',
-    },
+const orders = collection('orders')
+const populateOrder = async (order) => {
+  if (!order) return null
+  const user = order.user ? await User.findById(order.user) : null
+  const items = await Promise.all((order.items || []).map(async (item) => ({ ...item, product: await Product.findById(item.product) })))
+  return { ...order, user: user ? User.withoutPassword(user) : null, items }
+}
+
+const Order = {
+  async create(values) {
+    const reference = orders.doc()
+    const timestamp = serverTimestamp()
+    const order = { ...values, paymentStatus: 'pending', deliveryStatus: 'processing', createdAt: timestamp, updatedAt: timestamp }
+    await reference.set(order)
+    return populateOrder({ _id: reference.id, ...order })
   },
-  { timestamps: true }
-);
+  async findByUser(userId) {
+    const snapshot = await orders.where('user', '==', userId).get()
+    return Promise.all(snapshot.docs.map((doc) => populateOrder(toPlainDocument(doc))))
+  },
+  async findAll() {
+    const snapshot = await orders.orderBy('createdAt', 'desc').get()
+    return Promise.all(snapshot.docs.map((doc) => populateOrder(toPlainDocument(doc))))
+  },
+  async updateStatus(id, values) {
+    const reference = orders.doc(id)
+    if (!(await reference.get()).exists) return null
+    await reference.update({ ...values, updatedAt: serverTimestamp() })
+    return populateOrder(await findById('orders', id))
+  },
+}
 
-const Order = mongoose.model('Order', orderSchema);
-
-export default Order;
+export default Order

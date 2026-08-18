@@ -1,66 +1,38 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs'
+import { collection, findById, serverTimestamp, toPlainDocument } from '../lib/firestore.js'
 
-const shippingAddressSchema = new mongoose.Schema({
-  fullName: { type: String, required: true },
-  country: { type: String, required: true },
-  city: { type: String, required: true },
-  postalCode: { type: String, required: true },
-  fullAddress: { type: String, required: true },
-}, { _id: true });
+const users = collection('users')
+const withoutPassword = (user) => {
+  if (!user) return null
+  const { password, ...safeUser } = user
+  return safeUser
+}
 
-const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
+const User = {
+  async findById(id) { return findById('users', id) },
+  async findByEmail(email) {
+    const snapshot = await users.where('email', '==', email).limit(1).get()
+    return snapshot.empty ? null : toPlainDocument(snapshot.docs[0])
   },
-  firstname_lastname: {
-    type: String,
-    required: true,
+  async findNonAdmins() {
+    const snapshot = await users.get()
+    return snapshot.docs.map(toPlainDocument).filter((user) => user.role !== 'admin').map(withoutPassword)
   },
-  password: {
-    type: String,
-    required: true,
-    minlength: 8,
+  async create({ email, firstname_lastname, password, profileImage = '', role = 'user' }) {
+    const reference = users.doc()
+    const timestamp = serverTimestamp()
+    const user = { email, firstname_lastname, password: await bcrypt.hash(password, 10), profileImage, role, shippingAddresses: [], createdAt: timestamp, updatedAt: timestamp }
+    await reference.set(user)
+    return { _id: reference.id, ...user }
   },
-  profileImage: {
-    type: String,
-    default: '',
+  async update(id, values) {
+    const reference = users.doc(id)
+    if (!(await reference.get()).exists) return null
+    await reference.update({ ...values, updatedAt: serverTimestamp() })
+    return findById('users', id)
   },
-  role: {
-    type: String,
-    required: true,
-    enum: ['user', 'admin'],
-    default: 'user',
-  },
-  shippingAddresses: {
-    type: [shippingAddressSchema],
-    default: [],
-    validate:{
-      validator:function (arr){
-        return arr.length <= 3;
-      },
-      message:'Maximum 3 addresses can be added.'
-    }
-  },
-}, { timestamps: true });
+  comparePassword(user, password) { return bcrypt.compare(password, user.password) },
+  withoutPassword,
+}
 
-// hash password before saving user to db
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-
-  next();
-});
-
-// compare password
-userSchema.methods.comparePassword = async function (userPassword) {
-  return await bcrypt.compare(userPassword, this.password);
-};
-
-const User = mongoose.model('User', userSchema);
-
-export default User;
+export default User

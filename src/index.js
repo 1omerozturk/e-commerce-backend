@@ -6,7 +6,7 @@ import productRoutes from './routes/productRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
 
-import { connectDB } from './lib/db.js'
+import { verifyFirebaseConnection } from './lib/firebase.js'
 import cors from 'cors'
 
 const app = express()
@@ -26,8 +26,17 @@ app.use('/api/categories', categoryRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/orders', orderRoutes)
 
-console.log(PORT)
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`)
-  connectDB()
-})
+const startServer = async () => {
+  try {
+    await verifyFirebaseConnection()
+    console.log(PORT)
+    app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}`)
+    })
+  } catch (error) {
+    console.error('Firebase Firestore bağlantısı başarısız:', error.message)
+    process.exit(1)
+  }
+}
+
+startServer()
